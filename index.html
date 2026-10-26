@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Juego para aprender glucólisis, ciclo de Krebs, ciclo de la urea y glucogenólisis enzima por enzima.">
+<title>Enzimas en Cadena</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: mapa metabólico vertical (izquierda) + mesa de fichas fija (derecha / abajo en móvil). Cada ruta tiene su color, como en los mapas de pared de bioquímica. */
+:root {
+  --bg: #eef2f4;
+  --surface: #ffffff;
+  --ink: #15202b;
+  --muted: #586776;
+  --line: #cfd8df;
+  --enz: #2348c9;
+  --enz-soft: #e6ecff;
+  --ok: #17845a;
+  --ok-soft: #e2f4ec;
+  --bad: #c2373a;
+  --bad-soft: #fbe7e7;
+  --c-glu: #b86a00;
+  --c-krebs: #0b7f86;
+  --c-urea: #6e44bd;
+  --c-gly: #b8355f;
+  --f-display: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", Roboto, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1418; --surface: #172028; --ink: #e5ecf1; --muted: #98a7b4; --line: #2b3843;
+    --enz: #8ea9ff; --enz-soft: #1d2747; --ok: #4fca93; --ok-soft: #12302a; --bad: #ff7b7b; --bad-soft: #3a1c1f;
+    --c-glu: #f0a63a; --c-krebs: #3fc3c9; --c-urea: #b294f0; --c-gly: #f27aa0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1418; --surface: #172028; --ink: #e5ecf1; --muted: #98a7b4; --line: #2b3843;
+  --enz: #8ea9ff; --enz-soft: #1d2747; --ok: #4fca93; --ok-soft: #12302a; --bad: #ff7b7b; --bad-soft: #3a1c1f;
+  --c-glu: #f0a63a; --c-krebs: #3fc3c9; --c-urea: #b294f0; --c-gly: #f27aa0;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.5; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--enz); outline-offset: 2px; }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 40px; }
+.top { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: end; justify-content: space-between; margin-bottom: 22px; }
+.top h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(30px, 5vw, 46px); line-height: 1; letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+.top h1 span { color: var(--enz); }
+.top p { margin: 8px 0 0; color: var(--muted); max-width: 52ch; }
+
+.controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tab { border: 1.5px solid var(--line); background: var(--surface); padding: 7px 13px; border-radius: 999px; font-weight: 700; font-size: 14px; display: inline-flex; gap: 8px; align-items: center; }
+.tab i { width: 10px; height: 10px; border-radius: 50%; background: var(--pc); display: inline-block; }
+.tab[aria-selected="true"] { border-color: var(--pc); background: var(--pc); color: var(--surface); }
+.tab[aria-selected="true"] i { background: var(--surface); }
+.mode { display: inline-flex; border: 1.5px solid var(--line); border-radius: 10px; overflow: hidden; align-self: flex-start; background: var(--surface); }
+.mode button { border: 0; background: none; padding: 6px 12px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.mode button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.mode-l { font-family: var(--f-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 28px; align-items: start; }
+main { min-width: 0; }
+
+.ph { border-left: 5px solid var(--pc); padding: 4px 0 4px 16px; margin-bottom: 22px; }
+.eyebrow { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--pc); font-weight: 600; }
+.ph h2 { font-family: var(--f-display); font-size: 30px; margin: 2px 0 6px; line-height: 1.1; }
+.ph p { margin: 0; color: var(--muted); max-width: 62ch; }
+.bar { height: 6px; background: var(--line); border-radius: 6px; margin-top: 14px; overflow: hidden; max-width: 420px; }
+.bar i { display: block; height: 100%; background: var(--pc); transition: width .4s ease; }
+.src { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+.bar-l { font-family: var(--f-mono); font-size: 12px; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
+
+/* cadena */
+.chain { display: flex; flex-direction: column; }
+.node { align-self: flex-start; max-width: 100%; background: var(--surface); border: 2px solid var(--pc); border-radius: 12px; padding: 9px 15px; font-weight: 700; font-size: 16.5px; position: relative; z-index: 1; overflow-wrap: anywhere; }
+.node.first { background: var(--pc); color: var(--surface); }
+.rxn { display: grid; grid-template-columns: 34px minmax(0, 1fr); min-height: 70px; }
+.rail { position: relative; }
+.rail::before { content: ""; position: absolute; left: 16px; top: 0; bottom: 10px; width: 3px; background: var(--pc); }
+.rail::after { content: ""; position: absolute; left: 10.5px; bottom: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 11px solid var(--pc); }
+.rbody { padding: 12px 0 14px 6px; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.eline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.num { font-family: var(--f-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.enzbox { background: var(--enz-soft); color: var(--enz); border: 1.5px solid var(--enz); border-radius: 6px; padding: 4px 10px; font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
+.enzbox.hint { border-style: dashed; }
+.loc { font-family: var(--f-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; font-family: var(--f-mono); font-size: 12.5px; }
+.tag { padding: 1px 7px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); }
+.tag b { color: var(--ink); font-weight: 600; }
+
+.slot { border: 2px dashed var(--muted); background: transparent; border-radius: 8px; padding: 6px 14px; font-weight: 700; color: var(--muted); display: inline-flex; gap: 8px; align-items: center; transition: background .15s, border-color .15s; max-width: 100%; text-align: left; }
+.slot .q { font-family: var(--f-display); font-size: 18px; color: var(--ink); }
+.slot:hover, .slot.over { border-color: var(--enz); background: var(--enz-soft); color: var(--enz); }
+.slot.sel { border-style: solid; border-color: var(--enz); background: var(--enz-soft); color: var(--enz); box-shadow: 0 0 0 4px color-mix(in srgb, var(--enz) 22%, transparent); }
+.slot.metslot { align-self: flex-start; border-radius: 12px; padding: 9px 15px; }
+.shake { animation: shake .4s; border-color: var(--bad) !important; background: var(--bad-soft) !important; color: var(--bad) !important; }
+@keyframes shake { 0%,100% { transform: translateX(0) } 20%,60% { transform: translateX(-6px) } 40%,80% { transform: translateX(6px) } }
+.pop { animation: pop .45s ease; }
+@keyframes pop { 0% { transform: scale(.9); box-shadow: 0 0 0 0 var(--ok) } 60% { transform: scale(1.04) } 100% { transform: scale(1); box-shadow: 0 0 0 0 transparent } }
+
+.ficha { border: 1.5px solid var(--ok); background: var(--ok-soft); border-radius: 10px; max-width: 640px; }
+.ficha-h { width: 100%; border: 0; background: none; text-align: left; padding: 8px 12px; font-weight: 700; color: var(--ok); display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.ficha-h span:last-child { font-family: var(--f-mono); }
+.ficha-b { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+.ficha-b p { margin: 0; }
+.ficha-b .k { font-family: var(--f-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: block; }
+.ficha-b .clin { border-top: 1px dashed var(--line); padding-top: 8px; }
+
+.gap { font-family: var(--f-mono); font-size: 12px; color: var(--muted); padding: 14px 0 10px 4px; border-left: 3px dotted var(--line); margin-left: 15px; padding-left: 18px; }
+.divider { font-family: var(--f-mono); font-size: 12px; color: var(--pc); border-top: 2px solid var(--pc); border-bottom: 2px solid var(--pc); padding: 4px 8px; margin: 8px 0; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.cyc { margin-top: 12px; display: flex; gap: 10px; align-items: center; color: var(--pc); font-weight: 700; }
+.cyc svg { flex: none; }
+
+.done { margin-top: 26px; border: 2px solid var(--pc); border-radius: 14px; padding: 18px 20px; background: var(--surface); }
+.done h3 { font-family: var(--f-display); font-size: 24px; margin: 0 0 6px; }
+.done p { margin: 0 0 14px; max-width: 64ch; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { border: 1.5px solid var(--ink); background: var(--ink); color: var(--bg); border-radius: 8px; padding: 7px 14px; font-weight: 700; font-size: 14px; }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+
+/* panel */
+aside { position: sticky; top: max(16px, env(safe-area-inset-top, 0px)); background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - 32px); overflow: auto; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stat { background: var(--bg); border-radius: 8px; padding: 6px 8px; }
+.stat b { display: block; font-family: var(--f-display); font-size: 22px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stat span { font-family: var(--f-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.stat.ok b { color: var(--ok); } .stat.bad b { color: var(--bad); }
+.hint-l { font-size: 14px; color: var(--muted); margin: 0; }
+.hint-l b { color: var(--ink); }
+.fb { font-size: 14px; border-radius: 8px; padding: 8px 10px; }
+.fb.ok { background: var(--ok-soft); color: var(--ink); border: 1px solid var(--ok); }
+.fb.bad { background: var(--bad-soft); color: var(--ink); border: 1px solid var(--bad); }
+.fb:empty { display: none; }
+.bank-h { font-family: var(--f-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 -6px; }
+.bank { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip { border: 1.5px solid var(--enz); background: var(--surface); color: var(--enz); border-radius: 6px; padding: 5px 10px; font-weight: 700; font-size: 14px; text-align: left; touch-action: manipulation; }
+.chip.met { border-color: var(--pc); color: var(--ink); border-radius: 999px; }
+.chip:hover { background: var(--enz-soft); }
+.chip.sel { background: var(--enz); color: var(--surface); }
+.chip.met.sel { background: var(--pc); color: var(--surface); }
+.chip.used { opacity: .35; text-decoration: line-through; cursor: default; border-style: dashed; }
+.chip[draggable="true"] { cursor: grab; }
+
+@media (max-width: 880px) {
+  .app { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  aside { position: sticky; top: auto; bottom: 0; max-height: 44vh; border-radius: 14px 14px 0 0; padding-bottom: max(14px, env(safe-area-inset-bottom, 0px)); box-shadow: 0 -8px 24px color-mix(in srgb, var(--ink) 12%, transparent); gap: 10px; }
+  .stats { grid-template-columns: repeat(3, 1fr); }
+  .stat b { font-size: 18px; }
+  .wrap { padding-bottom: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+<style>body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Enzimas <span>en Cadena</span></h1>
+      <p>Arma cada ruta metabólica paso por paso. Cada vez que aciertes, se abre la ficha de lo que hace esa enzima. Contenido tomado de Marks, <i>Bioquímica médica</i>, 5.ª ed.</p>
+    </div>
+    <div class="controls">
+      <div class="tabs" role="tablist" id="tabs"></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span class="mode-l">Completar</span>
+        <div class="mode" id="mode">
+          <button id="m-enz" data-mode="enz" aria-pressed="true">Enzimas</button>
+          <button id="m-met" data-mode="met" aria-pressed="false">Metabolitos</button>
+        </div>
+      </div>
+    </div>
+  </header>
+  <div class="app">
+    <main id="flow" aria-live="polite"></main>
+    <aside id="panel"></aside>
+  </div>
+</div>
+
+<script>
+const PATHS = {
+  glucolisis: {
+    name: "Glucólisis", color: "--c-glu", where: "Citosol · todas las células", src: "Marks, Bioquímica médica, 5.ª ed., cap. 22",
+    intro: "Oxida una glucosa a dos piruvatos. Genera ATP por fosforilación a nivel de sustrato, con o sin oxígeno.",
+    summary: "Fase preparatoria: se gastan 2 ATP. Fase generadora: 4 ATP y 2 NADH. Neto por glucosa: 2 ATP, 2 NADH y 2 piruvato (ΔG°′ global ≈ –22 kcal/mol). Las enzimas reguladoras clave son hexocinasa, PFK-1 y piruvato cinasa. Sin oxígeno, la lactato deshidrogenasa reduce el piruvato a lactato y regenera el NAD⁺.",
+    steps: [
+      { from: "Glucosa", to: "Glucosa 6-fosfato", enz: "Hexocinasa", inn: "ATP", out: "ADP",
+        what: "Transfiere un fosfato del ATP a la glucosa. La glucosa 6-P no puede regresar a través de la membrana plasmática, así que la glucosa queda destinada al metabolismo de la célula, aunque todavía no a la glucólisis.",
+        reg: "Irreversible. En la mayoría de los tejidos tiene Km baja y la inhibe su producto, la glucosa 6-P. En hígado y células β del páncreas está la glucocinasa: Km alta y casi no la inhibe la G6P. Cuando la glucosa está baja, la GKRP se la lleva al núcleo.",
+        clin: "La MODY tipo 2 se debe a mutaciones de la glucocinasa pancreática con menor actividad. Se necesita más glucosa para que la célula β libere insulina." },
+      { from: "Glucosa 6-fosfato", to: "Fructosa 6-fosfato", enz: "Fosfoglucoisomerasa",
+        what: "Isomeriza la glucosa 6-P a fructosa 6-P. Coloca un grupo ceto junto al carbono 3, lo que permite romper después el enlace entre los carbonos 3 y 4.",
+        reg: "Reversible. La misma isomerasa trabaja en la gluconeogénesis." },
+      { from: "Fructosa 6-fosfato", to: "Fructosa 1,6-bisfosfato", enz: "Fosfofructocinasa 1 (PFK-1)", inn: "ATP", out: "ADP",
+        what: "Fosforila la fructosa 6-P en el carbono 1 usando ATP. Es el primer paso comprometido: la glucosa queda destinada de forma irrevocable a la glucólisis.",
+        reg: "Enzima limitante de la velocidad e irreversible. Inhiben: ATP (sitio alostérico) y citrato. Activan: AMP y fructosa 2,6-bisP, que fabrica la PFK-2. En hígado, el glucagón baja la fructosa 2,6-bisP.",
+        clin: "Tiene subunidades M (músculo), L (hígado) y C. El músculo maduro solo expresa M; los eritrocitos expresan M y L." },
+      { from: "Fructosa 1,6-bisfosfato", to: "DHAP + Gliceraldehído 3-fosfato", enz: "Aldolasa",
+        what: "Rompe la fructosa 1,6-bisP en dos fosfatos de triosa: dihidroxiacetona fosfato (DHAP) y gliceraldehído 3-P. Una lisina del sitio activo forma un enlace covalente con el sustrato.",
+        reg: "Reversible: rotura aldólica en un sentido y condensación aldólica en el otro.",
+        clin: "Solo la aldolasa B (hígado, riñón, intestino) rompe también la fructosa 1-P. Su falta es la intolerancia hereditaria a la fructosa, con hipoglucemia y acidosis láctica." },
+      { from: "DHAP + Gliceraldehído 3-fosfato", to: "2 Gliceraldehído 3-fosfato", enz: "Fosfato de triosa isomerasa", divider: "Desde aquí, todo ocurre ×2 por cada glucosa",
+        what: "Isomeriza la DHAP a gliceraldehído 3-P. Así, por cada glucosa se obtienen 2 gliceraldehído 3-P que siguen en la vía.",
+        reg: "Reversible." },
+      { from: "2 Gliceraldehído 3-fosfato", to: "1,3-Bisfosfoglicerato", enz: "Gliceraldehído 3-P deshidrogenasa", inn: "NAD⁺ + Pi", out: "NADH",
+        what: "Oxida el aldehído a carboxilo y pasa los electrones al NAD⁺. Una cisteína del sitio activo forma un tioéster de alta energía. Luego entra un Pi y se forma el enlace acilfosfato del 1,3-bisfosfoglicerato.",
+        reg: "Necesita NAD⁺ continuo. Sin oxígeno, la lactato deshidrogenasa lo regenera.",
+        clin: "El arsenato actúa como análogo del fosfato e inhibe la fosforilación a nivel de sustrato." },
+      { from: "1,3-Bisfosfoglicerato", to: "3-Fosfoglicerato", enz: "3-Fosfoglicerato cinasa", inn: "ADP", out: "ATP",
+        what: "Transfiere el fosfato del enlace acilfosfato al ADP y forma ATP: fosforilación a nivel de sustrato.",
+        reg: "El enlace acilfosfato tiene unas 10 kcal/mol, suficiente para que la transferencia sea favorable.",
+        clin: "En el eritrocito, parte del 1,3-BPG se desvía a 2,3-BPG, que disminuye la afinidad de la hemoglobina por el O₂." },
+      { from: "3-Fosfoglicerato", to: "2-Fosfoglicerato", enz: "Fosfoglicerato mutasa",
+        what: "Mueve el fosfato del carbono 3 al carbono 2. Es el primer paso para convertir un fosfoéster de baja energía en uno de alta energía.",
+        reg: "Reversible." },
+      { from: "2-Fosfoglicerato", to: "Fosfoenolpiruvato", enz: "Enolasa", out: "H₂O",
+        what: "Elimina agua del 2-fosfoglicerato y forma fosfoenolpiruvato (PEP). El enlace fosfoenol es de alta energía: su hidrólisis libera unas 14 kcal/mol.",
+        reg: "Reversible. En hipoxia, el HIF-1 aumenta la transcripción de su gen." },
+      { from: "Fosfoenolpiruvato", to: "Piruvato", enz: "Piruvato cinasa", inn: "ADP", out: "ATP",
+        what: "Transfiere el fosfato del PEP al ADP y forma ATP y piruvato. Es favorable en energía e irreversible.",
+        reg: "Tiene isoenzimas R, L y M1/M2; solo la hepática (L) se regula. La activa la fructosa 1,6-bisP y la inhibe el ATP. En ayuno, la PKA (glucagón) la fosforila y la inactiva.",
+        clin: "La M1 (encéfalo, corazón, músculo) no tiene sitios alostéricos, así que ahí no regula la glucólisis." }
+    ]
+  },
+  krebs: {
+    name: "Ciclo de Krebs", color: "--c-krebs", where: "Matriz mitocondrial", src: "Marks, Bioquímica médica, 5.ª ed., cap. 23", cycle: "El oxaloacetato se regenera en cada vuelta y se une a otra acetil-CoA.",
+    intro: "Oxida el grupo acetilo de la acetil-CoA a 2 CO₂ y guarda la energía en NADH, FAD(2H) y GTP. Incluye el paso puente desde el piruvato.",
+    summary: "Por cada acetil-CoA: 3 NADH, 1 FAD(2H), 1 GTP y 2 CO₂. Con ~2.5 ATP por NADH y ~1.5 por FAD(2H), da casi 10 enlaces de alta energía por acetilo. Irreversibles: citrato sintasa, isocitrato deshidrogenasa y α-cetoglutarato deshidrogenasa. Requiere niacina, riboflavina, ácido pantoténico, tiamina, Mg²⁺, Ca²⁺, Fe²⁺ y fosfato.",
+    steps: [
+      { from: "Piruvato", to: "Acetil-CoA", enz: "Complejo piruvato deshidrogenasa (PDC)", inn: "CoA + NAD⁺", out: "CO₂ + NADH", loc: "Puente",
+        what: "Oxida el piruvato a acetil-CoA: libera CO₂ y forma NADH. Tiene E1 (piruvato descarboxilasa, con TPP), E2 (transacetilasa, con lipoato) y E3 (dihidrolipoilo deshidrogenasa, con FAD).",
+        reg: "La PDC cinasa lo fosforila y lo apaga. La PDC fosfatasa, activada por Ca²⁺, lo enciende. ADP y piruvato inhiben a la cinasa. Acetil-CoA y NADH la estimulan e inhiben al complejo. La insulina lo activa.",
+        clin: "El defecto más común está en la subunidad α de E1 (ligado al X, dominante). La falta de tiamina (beriberi, alcoholismo) reduce su actividad. En la deficiencia de PDH se usa dieta cetogénica." },
+      { from: "Acetil-CoA", to: "Citrato", enz: "Citrato sintasa", inn: "Oxaloacetato + H₂O", out: "CoA",
+        what: "Condensa el grupo acetilo (2 C) con el oxaloacetato (4 C) y forma citrato (6 C). Es una sintasa: no usa energía de enlaces fosfato.",
+        reg: "Irreversible. No tiene reguladores alostéricos. La controlan la concentración de oxaloacetato, que es muy baja, y el citrato, producto que compite con el oxaloacetato." },
+      { from: "Citrato", to: "Isocitrato", enz: "Aconitasa",
+        what: "Isomeriza el citrato a isocitrato: mueve el grupo hidroxilo a un carbono vecino para que pueda oxidarse a grupo ceto. Usa un cofactor de hierro.",
+        reg: "Reversible y rápida. El citrato queda ~20 veces más concentrado que el isocitrato, así que el sobrante puede salir al citosol para fabricar ácidos grasos.",
+        clin: "En la anemia ferropénica se afecta el hierro de la aconitasa y de la succinato deshidrogenasa." },
+      { from: "Isocitrato", to: "α-Cetoglutarato", enz: "Isocitrato deshidrogenasa", inn: "NAD⁺", out: "CO₂ + NADH",
+        what: "Oxida el grupo alcohol del isocitrato y luego libera CO₂: una oxidación seguida de una descarboxilación. Forma α-cetoglutarato y NADH.",
+        reg: "Una de las etapas limitantes; irreversible. La activan el ADP (alostérico) y el Ca²⁺; la inhibe el NADH.",
+        clin: "Mutaciones con ganancia de función de algunas isoenzimas producen 2-hidroxiglutarato. Se encuentran en gliomas y leucemia mieloide aguda." },
+      { from: "α-Cetoglutarato", to: "Succinil-CoA", enz: "Complejo α-cetoglutarato deshidrogenasa", inn: "CoA + NAD⁺", out: "CO₂ + NADH",
+        what: "Descarboxilación oxidativa: libera CO₂, forma NADH y une el resto a la CoA con un enlace tioéster de alta energía. Usa TPP, ácido lipoico y FAD.",
+        reg: "Irreversible. La inhiben el NADH y la succinil-CoA, y quizá el GTP. La activa el Ca²⁺.",
+        clin: "El arsenito se une a los grupos sulfhidrilo del lipoato y bloquea los complejos α-cetoácido deshidrogenasa." },
+      { from: "Succinil-CoA", to: "Succinato", enz: "Succinato tiocinasa (succinil-CoA sintetasa)", inn: "GDP + Pi", out: "GTP + CoA",
+        what: "Usa la energía del enlace tioéster de la succinil-CoA para formar GTP a partir de GDP y Pi: fosforilación a nivel de sustrato.",
+        reg: "El GTP equivale en energía al ATP y se usa directamente, por ejemplo, en la síntesis de proteínas.",
+        clin: "La succinil-CoA puede salir del ciclo para sintetizar hemo en hígado y médula ósea." },
+      { from: "Succinato", to: "Fumarato", enz: "Succinato deshidrogenasa", inn: "FAD", out: "FAD(2H)",
+        what: "Pasa electrones de los dos grupos –CH₂– del succinato a un FAD unido a la enzima y forma el doble enlace del fumarato. Esos electrones entran directo a la cadena respiratoria.",
+        reg: "Es a la vez enzima del ciclo y complejo II de la cadena de transporte de electrones; no bombea protones. No la regula el NADH.",
+        clin: "Su pérdida de actividad, con acumulación de succinato, se encuentra en el paraganglioma familiar." },
+      { from: "Fumarato", to: "Malato", enz: "Fumarasa", inn: "H₂O",
+        what: "Añade un grupo OH y un protón del agua al doble enlace del fumarato y forma malato.",
+        reg: "Reversible.",
+        clin: "Su deficiencia, con acumulación de fumarato, se encontró en leiomiomas múltiples cutáneos y uterinos (autosómica dominante)." },
+      { from: "Malato", to: "Oxaloacetato", enz: "Malato deshidrogenasa", inn: "NAD⁺", out: "NADH",
+        what: "Oxida el grupo alcohol del malato a grupo ceto, pasa los electrones al NAD⁺ y regenera el oxaloacetato.",
+        reg: "Reversible. El equilibrio favorece al malato, por eso hay muy poco oxaloacetato. El NADH la inhibe.",
+        clin: "En ayuno, el malato sale de la mitocondria y sirve de sustrato para la gluconeogénesis." }
+    ]
+  },
+  urea: {
+    name: "Ciclo de la urea", color: "--c-urea", where: "Hígado · mitocondria → citosol", src: "Marks, Bioquímica médica, 5.ª ed., cap. 36", cycle: "La ornitina vuelve a la mitocondria a cambio de citrulina e inicia otra vuelta.",
+    intro: "Convierte el nitrógeno de los aminoácidos en urea y así evita los efectos tóxicos del amoniaco. Empieza en la mitocondria y termina en el citosol.",
+    summary: "El nitrógeno entra como NH₄⁺ y como aspartato. La ornitina inicia el ciclo y se regenera, igual que el oxaloacetato en Krebs. Carbamoíl fosfato y citrulina se forman en la mitocondria; lo demás ocurre en el citosol. Se regula por disponibilidad de sustrato (prealimentación), por NAG sobre la CPSI y por inducción de enzimas con dieta alta en proteínas o ayuno.",
+    steps: [
+      { from: "NH₄⁺ + CO₂", to: "Carbamoíl fosfato", enz: "Carbamoíl fosfato sintetasa I (CPSI)", inn: "2 ATP", out: "2 ADP + Pi", loc: "Mitocondria",
+        what: "Une NH₄⁺ y CO₂ rompiendo 2 ATP para formar carbamoíl fosfato, que tiene un enlace fosfato de alta energía. Así entra el primer nitrógeno.",
+        reg: "La activa alostéricamente el N-acetilglutamato (NAG), que no tiene otra función conocida. La arginina estimula la síntesis de NAG.",
+        clin: "No confundir con la CPSII del citosol, que fabrica carbamoíl fosfato para pirimidinas usando el nitrógeno de la glutamina." },
+      { from: "Carbamoíl fosfato", to: "Citrulina", enz: "Ornitina transcarbamoilasa (OTC)", inn: "Ornitina", out: "Pi", loc: "Mitocondria",
+        what: "Une el carbamoíl fosfato con la ornitina y forma citrulina con la energía del enlace fosfato. La citrulina sale al citosol a cambio de ornitina.",
+        reg: "Ocurre en la mitocondria; depende de que entre ornitina desde el citosol.",
+        clin: "Es el defecto más común del ciclo (ligado al X, ~1 en 80 000). El carbamoíl fosfato acumulado pasa a la síntesis de pirimidinas y se excreta ácido orótico en la orina." },
+      { from: "Citrulina", to: "Argininosuccinato", enz: "Argininosuccinato sintetasa", inn: "Aspartato + ATP", out: "AMP + PPi", loc: "Citosol",
+        what: "Une la citrulina con el aspartato, que dona el segundo nitrógeno de la urea. La reacción la impulsa la hidrólisis de ATP a AMP y pirofosfato.",
+        reg: "El aspartato viene de la transaminación del oxaloacetato.",
+        clin: "Una citrulina muy alta en sangre sugiere que el bloqueo está en esta enzima." },
+      { from: "Argininosuccinato", to: "Arginina", enz: "Argininosuccinato liasa", out: "Fumarato", loc: "Citosol",
+        what: "Rompe el argininosuccinato en arginina y fumarato. El fumarato pasa a malato (fumarasa citoplasmática) y luego a oxaloacetato, que se transamina a aspartato: el doble ciclo de Krebs.",
+        reg: "Los carbonos del fumarato vienen del aspartato y se pueden reciclar a aspartato.",
+        clin: "Si el defecto está después de formar argininosuccinato, dar mucha arginina ayuda: regenera ornitina y el nitrógeno se excreta como argininosuccinato." },
+      { from: "Arginina", to: "Ornitina", enz: "Arginasa", inn: "H₂O", out: "Urea", loc: "Citosol",
+        what: "Rompe la arginina: la urea sale del grupo guanidinio y se regenera la ornitina, que vuelve a la mitocondria para otra vuelta.",
+        reg: "Cuando sube la arginina en el hígado hay más NAG y más ornitina, así que el ciclo opera más rápido.",
+        clin: "Los humanos no rompen la urea. Las bacterias intestinales sí, con ureasa, y reciclan cerca de 1/4 de la urea diaria." }
+    ]
+  },
+  glucogenolisis: {
+    name: "Glucogenólisis", color: "--c-gly", where: "Hígado y músculo · citosol", src: "Marks, Bioquímica médica, 5.ª ed., cap. 26",
+    intro: "Degrada el glucógeno. En el hígado mantiene la glucosa en sangre; en el músculo da combustible a la glucólisis durante el ejercicio.",
+    summary: "El glucógeno tiene enlaces α-1,4 con ramas α-1,6 cada 8 a 10 residuos. Se degrada en ~9 glucosa 1-fosfato (fosforilasa) por cada glucosa libre (desramificante). En el hígado la activan glucagón y adrenalina y la frenan insulina y glucosa. En el músculo la activan AMP, Ca²⁺ y adrenalina.",
+    steps: [
+      { from: "Glucógeno fosforilasa b (inactiva)", to: "Glucógeno fosforilasa a (activa)", enz: "Fosforilasa cinasa", inn: "ATP", out: "ADP", loc: "Encendido",
+        what: "Pasa un fosfato del ATP a una serina específica de la glucógeno fosforilasa b y la convierte en la forma activa a. Es la única cinasa que fosforila a la fosforilasa.",
+        reg: "Hígado: glucagón → AMPc → PKA → fosforilasa cinasa. La adrenalina (α) y la contracción muscular suben el Ca²⁺, que con calmodulina también la activa. Después de comer, la PP-1 quita los fosfatos." },
+      { from: "Glucógeno (n residuos)", to: "Glucosa 1-fosfato + glucógeno (n−1)", enz: "Glucógeno fosforilasa", inn: "Pi",
+        what: "Fosforólisis: desde el extremo no reductor corta un residuo a la vez agregando fosfato y libera glucosa 1-fosfato, sin gastar UTP. No alcanza los 4 residuos más cercanos a una ramificación.",
+        reg: "Es la enzima reguladora clave. En hígado la frenan la glucosa y la insulina. En músculo la activan el AMP (alostérico), el Ca²⁺ y la adrenalina; ahí la glucosa no la inhibe.",
+        clin: "Falta en músculo: enfermedad de McArdle (tipo V), con fatiga, calambres y a veces mioglobinuria al ejercitarse. Falta en hígado: enfermedad de Hers, con hipoglucemia de ayuno." },
+      { from: "Dextrina límite (4 residuos en la rama)", to: "Cadena lineal + 1 residuo en α-1,6", enz: "Desramificante (transferasa)",
+        what: "Mueve una unidad de 3 residuos de glucosa de la rama al extremo de una cadena larga, con enlace α-1,4. En la ramificación queda un solo residuo unido por α-1,6.",
+        reg: "Es una de las dos actividades de la enzima desramificante." },
+      { from: "Cadena lineal + 1 residuo en α-1,6", to: "Glucosa libre + cadena lineal", enz: "Desramificante (amilo-1,6-glucosidasa)", inn: "H₂O",
+        what: "Hidroliza el residuo que quedó en la ramificación α-1,6 y libera glucosa libre. La cadena queda lista para que siga la fosforilasa.",
+        reg: "Es la segunda actividad de la enzima desramificante.",
+        clin: "Su falta es la enfermedad por almacenamiento de glucógeno tipo III: hepatomegalia, hipoglucemia leve y glucógeno con ramas más cortas." },
+      { from: "Glucosa 1-fosfato", to: "Glucosa 6-fosfato", enz: "Fosfoglucomutasa",
+        what: "Convierte la glucosa 1-fosfato en glucosa 6-fosfato. En el músculo, la G6P entra directo a la glucólisis.",
+        reg: "Reversible; también funciona en la síntesis de glucógeno." },
+      { from: "Glucosa 6-fosfato", to: "Glucosa", enz: "Glucosa 6-fosfatasa", inn: "H₂O", out: "Pi", loc: "Hígado y riñón",
+        what: "Hidroliza la glucosa 6-P a glucosa libre, que sale a la sangre. Es la compuerta a la sangre tanto de la glucogenólisis como de la gluconeogénesis.",
+        reg: "Solo existe en hígado y riñón. El músculo no la tiene, así que su glucógeno solo sirve para generar ATP en el propio músculo.",
+        clin: "Su deficiencia es la enfermedad tipo I (von Gierke). La G6P acumulada activa la glucógeno sintasa y se acumula glucógeno, con hepatomegalia." }
+    ]
+  }
+};
+
+const ORDER = ["glucolisis", "krebs", "urea", "glucogenolisis"];
+let cur = ORDER.includes(location.hash.slice(1)) ? location.hash.slice(1) : "glucolisis";
+let mode = "enz";
+let selSlot = null, selChip = null, shakeIdx = null;
+let msg = null;
+let opened = new Set();
+let prog = {};
+try { prog = JSON.parse(localStorage.getItem("eec-prog-marks") || "{}") || {}; } catch (e) { prog = {}; }
+const save = () => { try { localStorage.setItem("eec-prog-marks", JSON.stringify(prog)); } catch (e) {} };
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const steps = () => PATHS[cur].steps;
+const val = (s, m = mode) => m === "enz" ? s.enz : s.to;
+
+function P() {
+  const k = cur + "|" + mode;
+  if (!prog[k]) prog[k] = { solved: [], hits: 0, errs: 0, last: null, order: shuffle(steps().map((_, i) => i)), revealed: false };
+  return prog[k];
+}
+
+function renderTabs() {
+  document.getElementById("tabs").innerHTML = ORDER.map(k =>
+    `<button class="tab" role="tab" id="tab-${k}" data-tab="${k}" aria-selected="${k === cur}" style="--pc:var(${PATHS[k].color})"><i></i>${PATHS[k].name}</button>`).join("");
+  document.querySelectorAll("#mode button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === mode));
+}
+
+function enzHTML(i, s, p) {
+  const solved = p.solved.includes(i);
+  if (mode === "enz" && !solved)
+    return `<button class="slot${selSlot === i ? " sel" : ""}" data-slot="${i}" aria-label="Elegir la enzima del paso ${i + 1}"><span class="q">?</span> ¿Qué enzima?</button>`;
+  const pop = solved && p.last === i && mode === "enz" ? " pop" : "";
+  return `<div class="enzbox${mode === "met" && !solved ? " hint" : ""}${pop}">${esc(s.enz)}</div>`;
+}
+
+function nodeHTML(text, i, p, first) {
+  if (mode === "met" && i !== null && !p.solved.includes(i))
+    return `<button class="slot metslot${selSlot === i ? " sel" : ""}" data-slot="${i}" aria-label="Elegir el producto del paso ${i + 1}"><span class="q">?</span> ¿Qué se forma?</button>`;
+  const pop = mode === "met" && i !== null && p.last === i ? " pop" : "";
+  return `<div class="node${first ? " first" : ""}${pop}">${esc(text)}</div>`;
+}
+
+function fichaHTML(i, s) {
+  const open = opened.has(i);
+  return `<div class="ficha" id="f${i}">
+    <button class="ficha-h" data-toggle="${i}" aria-expanded="${open}"><span>✓ ¿Qué hace esta enzima?</span><span>${open ? "−" : "+"}</span></button>
+    ${open ? `<div class="ficha-b">
+      <p>${esc(s.what)}</p>
+      ${s.reg ? `<p><span class="k">Regulación</span>${esc(s.reg)}</p>` : ""}
+      ${s.clin ? `<p class="clin"><span class="k">Para recordar</span>${esc(s.clin)}</p>` : ""}
+    </div>` : ""}
+  </div>`;
+}
+
+function renderFlow() {
+  const path = PATHS[cur], p = P(), st = steps();
+  const pct = Math.round(p.solved.length / st.length * 100);
+  let h = `<div class="ph" style="--pc:var(${path.color})">
+    <span class="eyebrow">${esc(path.where)}</span>
+    <h2>${esc(path.name)}</h2>
+    <p>${esc(path.intro)}</p>
+    <div class="bar"><i style="width:${pct}%"></i></div>
+    <div class="bar-l">${p.solved.length} / ${st.length} pasos${p.revealed ? " · respuestas mostradas" : ""}</div>
+    <div class="src">Fuente: ${esc(path.src)}</div>
+  </div><div class="chain" style="--pc:var(${path.color})">`;
+  st.forEach((s, i) => {
+    if (i === 0) h += nodeHTML(s.from, null, p, true);
+    else if (s.from !== st[i - 1].to) h += `<div class="gap">después</div>` + nodeHTML(s.from, null, p, false);
+    const tags = [s.inn ? `<span class="tag">entra <b>${esc(s.inn)}</b></span>` : "", s.out ? `<span class="tag">sale <b>${esc(s.out)}</b></span>` : ""].join("");
+    h += `<div class="rxn" id="r${i}"><div class="rail"></div><div class="rbody">
+      <div class="eline"><span class="num">${String(i + 1).padStart(2, "0")}</span>${enzHTML(i, s, p)}${s.loc ? `<span class="loc">${esc(s.loc)}</span>` : ""}</div>
+      ${tags ? `<div class="tags">${tags}</div>` : ""}
+      ${p.solved.includes(i) ? fichaHTML(i, s) : ""}
+    </div></div>`;
+    h += nodeHTML(s.to, i, p, false);
+    if (s.divider) h += `<div class="divider">${esc(s.divider)}</div>`;
+  });
+  if (path.cycle) h += `<div class="cyc"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>${esc(path.cycle)}</div>`;
+  h += `</div>`;
+  if (p.solved.length === st.length) {
+    const other = mode === "enz" ? "met" : "enz";
+    h += `<section class="done" style="--pc:var(${path.color})">
+      <h3>${p.revealed ? "Ruta revisada" : "¡Ruta completa!"}</h3>
+      <p>${esc(path.summary)}</p>
+      <div class="btns">
+        <button class="btn" data-act="reset">Jugar otra vez</button>
+        <button class="btn ghost" data-act="mode-${other}">Ahora completa ${other === "met" ? "los metabolitos" : "las enzimas"}</button>
+        ${ORDER.indexOf(cur) < ORDER.length - 1 ? `<button class="btn ghost" data-tab="${ORDER[ORDER.indexOf(cur) + 1]}">Siguiente ruta: ${esc(PATHS[ORDER[ORDER.indexOf(cur) + 1]].name)}</button>` : ""}
+      </div></section>`;
+  }
+  document.getElementById("flow").innerHTML = h;
+}
+
+function renderPanel() {
+  const path = PATHS[cur], p = P(), st = steps();
+  const total = p.hits + p.errs;
+  const acc = total ? Math.round(p.hits / total * 100) + "%" : "—";
+  let hint;
+  if (p.solved.length === st.length) hint = "Ruta terminada. Revisa las fichas o cambia de modo.";
+  else if (selSlot !== null) hint = `Paso <b>${selSlot + 1}</b> seleccionado: ahora toca ${mode === "enz" ? "la enzima" : "el metabolito"}.`;
+  else if (selChip !== null) hint = `Ficha seleccionada: toca la casilla <b>?</b> donde va.`;
+  else hint = `Toca una casilla <b>?</b> y luego una ficha, o arrastra la ficha a su lugar.`;
+  const chips = p.order.map(j => {
+    const used = p.solved.includes(j);
+    return `<button class="chip${mode === "met" ? " met" : ""}${selChip === j ? " sel" : ""}${used ? " used" : ""}" data-chip="${j}" ${used ? "disabled" : 'draggable="true"'}>${esc(val(st[j]))}</button>`;
+  }).join("");
+  document.getElementById("panel").style.setProperty("--pc", `var(${path.color})`);
+  document.getElementById("panel").innerHTML = `
+    <div class="stats">
+      <div class="stat ok"><b>${p.hits}</b><span>Aciertos</span></div>
+      <div class="stat bad"><b>${p.errs}</b><span>Errores</span></div>
+      <div class="stat"><b>${acc}</b><span>Precisión</span></div>
+    </div>
+    <p class="hint-l">${hint}</p>
+    <div class="fb ${msg ? msg.kind : ""}" role="status">${msg ? msg.html : ""}</div>
+    <p class="bank-h">${mode === "enz" ? "Enzimas" : "Metabolitos"}</p>
+    <div class="bank">${chips}</div>
+    <div class="btns">
+      <button class="btn ghost" data-act="reset">Reiniciar</button>
+      <button class="btn ghost" data-act="reveal">Ver respuestas</button>
+    </div>`;
+}
+
+function render() {
+  renderTabs(); renderFlow(); renderPanel();
+  if (shakeIdx !== null) {
+    const el = document.querySelector(`[data-slot="${shakeIdx}"]`);
+    if (el) el.classList.add("shake");
+    shakeIdx = null;
+  }
+}
+
+function check(i, j) {
+  const p = P(), st = steps();
+  if (p.solved.includes(i) || p.solved.includes(j)) return;
+  if (val(st[j]) === val(st[i])) {
+    p.solved.push(i); p.hits++; p.last = i;
+    opened = new Set([i]);
+    msg = { kind: "ok", html: `<b>¡Correcto!</b> ${esc(st[i].enz)}: ${esc(st[i].from)} → ${esc(st[i].to)}.` };
+    selSlot = selChip = null;
+    save(); render();
+    const f = document.getElementById("f" + i) || document.getElementById("r" + i);
+    if (f) f.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+  } else {
+    p.errs++;
+    msg = mode === "enz"
+      ? { kind: "bad", html: `<b>No va aquí.</b> La ${esc(st[j].enz)} convierte ${esc(st[j].from)} → ${esc(st[j].to)}.` }
+      : { kind: "bad", html: `<b>No es ese.</b> ${esc(st[j].to)} lo forma la ${esc(st[j].enz)} a partir de ${esc(st[j].from)}.` };
+    shakeIdx = i; selChip = null; selSlot = i;
+    save(); render();
+  }
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  if (t.dataset.tab) { cur = t.dataset.tab; selSlot = selChip = null; msg = null; opened = new Set(); render(); window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" }); return; }
+  if (t.dataset.mode) { mode = t.dataset.mode; selSlot = selChip = null; msg = null; opened = new Set(); render(); return; }
+  if (t.dataset.toggle !== undefined) { const i = +t.dataset.toggle; opened.has(i) ? opened.delete(i) : opened.add(i); renderFlow(); return; }
+  if (t.dataset.slot !== undefined) {
+    const i = +t.dataset.slot;
+    if (selChip !== null) check(i, selChip);
+    else { selSlot = selSlot === i ? null : i; render(); }
+    return;
+  }
+  if (t.dataset.chip !== undefined) {
+    const j = +t.dataset.chip;
+    if (selSlot !== null) check(selSlot, j);
+    else { selChip = selChip === j ? null : j; render(); }
+    return;
+  }
+  const act = t.dataset.act;
+  if (act === "reset") { delete prog[cur + "|" + mode]; selSlot = selChip = null; msg = null; opened = new Set(); save(); render(); window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" }); }
+  else if (act === "reveal") { const p = P(); p.solved = steps().map((_, i) => i); p.revealed = true; p.last = null; opened = new Set(); msg = { kind: "ok", html: "Respuestas mostradas. Abre cada ficha con <b>+</b> para repasar." }; save(); render(); }
+  else if (act && act.startsWith("mode-")) { mode = act.slice(5); selSlot = selChip = null; msg = null; opened = new Set(); render(); window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" }); }
+});
+
+document.addEventListener("dragstart", e => {
+  const c = e.target.closest && e.target.closest("[data-chip]");
+  if (c) { e.dataTransfer.setData("text/plain", c.dataset.chip); e.dataTransfer.effectAllowed = "move"; }
+});
+document.addEventListener("dragover", e => {
+  const s = e.target.closest && e.target.closest("[data-slot]");
+  if (s) { e.preventDefault(); s.classList.add("over"); }
+});
+document.addEventListener("dragleave", e => {
+  const s = e.target.closest && e.target.closest("[data-slot]");
+  if (s) s.classList.remove("over");
+});
+document.addEventListener("drop", e => {
+  const s = e.target.closest && e.target.closest("[data-slot]");
+  if (!s) return;
+  e.preventDefault();
+  const j = e.dataTransfer.getData("text/plain");
+  if (j !== "") check(+s.dataset.slot, +j);
+});
+
+render();
+</script>
+</body>
+</html>
